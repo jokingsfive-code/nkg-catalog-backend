@@ -21,9 +21,15 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts
 COPY . .
 
 RUN composer dump-autoload --optimize \
-    && php artisan config:clear || true \
-    && php artisan storage:link || true
+    && mkdir -p storage/app/public/designs \
+    && mkdir -p storage/framework/cache \
+    && mkdir -p storage/framework/sessions \
+    && mkdir -p storage/framework/views \
+    && mkdir -p bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache \
+    && php artisan storage:link || true \
+    && php artisan config:clear || true
 
 EXPOSE 10000
 
-CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
+CMD chmod -R 775 storage bootstrap/cache && php artisan migrate --force && php artisan storage:link || true && php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
