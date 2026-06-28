@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Design;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class DesignController extends Controller
@@ -28,12 +28,62 @@ class DesignController extends Controller
         return response()->json($designs);
     }
 
+    private function uploadToSupabase($file, string $filename): array
+    {
+        $supabaseUrl = rtrim(env('SUPABASE_URL'), '/');
+        $serviceKey = env('SUPABASE_SERVICE_ROLE_KEY');
+        $bucket = env('SUPABASE_STORAGE_BUCKET', 'designs');
+
+        if (!$supabaseUrl || !$serviceKey) {
+            abort(500, 'Supabase storage is not configured.');
+        }
+
+        $path = 'designs/' . $filename;
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $serviceKey,
+            'apikey' => $serviceKey,
+            'Content-Type' => $file->getMimeType(),
+            'x-upsert' => 'true',
+        ])
+            ->withBody(file_get_contents($file->getRealPath()), $file->getMimeType())
+            ->post($supabaseUrl . '/storage/v1/object/' . $bucket . '/' . $path);
+
+        if (!$response->successful()) {
+            abort(500, 'Failed to upload image to Supabase Storage.');
+        }
+
+        return [
+            'path' => $path,
+            'url' => $supabaseUrl . '/storage/v1/object/public/' . $bucket . '/' . $path,
+        ];
+    }
+
+    private function deleteFromSupabase(?string $path): void
+    {
+        if (!$path) return;
+
+        $supabaseUrl = rtrim(env('SUPABASE_URL'), '/');
+        $serviceKey = env('SUPABASE_SERVICE_ROLE_KEY');
+        $bucket = env('SUPABASE_STORAGE_BUCKET', 'designs');
+
+        if (!$supabaseUrl || !$serviceKey) return;
+
+        Http::withHeaders([
+            'Authorization' => 'Bearer ' . $serviceKey,
+            'apikey' => $serviceKey,
+            'Content-Type' => 'application/json',
+        ])->delete($supabaseUrl . '/storage/v1/object/' . $bucket, [
+            'prefixes' => [$path],
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
             'category_id' => 'required|exists:categories,id',
             'images' => 'required|array|min:1',
-            'images.*' => 'required|mimes:png,jpg,jpeg,webp|max:102400',
+            'images.*' => 'required|mimes:png,jpg,jpeg,webp|max:512000',
         ]);
 
         $uploadedDesigns = [];
@@ -42,11 +92,6 @@ class DesignController extends Controller
             if (!$file || !$file->isValid()) {
                 return response()->json([
                     'message' => 'Upload file failed',
-                    'errors' => [
-                        'images.' . $index => [
-                            $file ? $file->getErrorMessage() : 'File not found',
-                        ],
-                    ],
                 ], 422);
             }
 
@@ -57,21 +102,13 @@ class DesignController extends Controller
             $safeName = Str::slug($nameOnly) ?: 'design';
             $filename = $safeName . '-' . time() . '-' . $index . '.' . $extension;
 
-            $directory = storage_path('app/public/designs');
-
-            if (!is_dir($directory)) {
-                mkdir($directory, 0775, true);
-            }
-
-            $file->move($directory, $filename);
-
-            $path = 'designs/' . $filename;
+            $uploaded = $this->uploadToSupabase($file, $filename);
 
             $design = Design::create([
                 'category_id' => $validated['category_id'],
                 'name' => $nameOnly,
-                'image_url' => url('storage/' . $path),
-                'image_public_id' => $path,
+                'image_url' => $uploaded['url'],
+                'image_public_id' => $uploaded['path'],
                 'sort_order' => 0,
                 'is_featured' => false,
             ]);
@@ -104,36 +141,20 @@ class DesignController extends Controller
         $imagePublicId = $design->image_public_id;
 
         if ($request->hasFile('image')) {
-            if (
-                $design->image_public_id &&
-                Storage::disk('public')->exists($design->image_public_id)
-            ) {
-                Storage::disk('public')->delete($design->image_public_id);
-            }
+            $this->deleteFromSupabase($design->image_public_id);
 
             $file = $request->file('image');
+            $originalName = $file->getClientOriginalName();
+            $nameOnly = pathinfo($originalName, PATHINFO_FILENAME);
+            $extension = strtolower($file->getClientOriginalExtension());
 
-            if ($file && $file->isValid()) {
-                $originalName = $file->getClientOriginalName();
-                $nameOnly = pathinfo($originalName, PATHINFO_FILENAME);
-                $extension = strtolower($file->getClientOriginalExtension());
+            $safeName = Str::slug($nameOnly) ?: 'design';
+            $filename = $safeName . '-' . time() . '.' . $extension;
 
-                $safeName = Str::slug($nameOnly) ?: 'design';
-                $filename = $safeName . '-' . time() . '.' . $extension;
+            $uploaded = $this->uploadToSupabase($file, $filename);
 
-                $directory = storage_path('app/public/designs');
-
-                if (!is_dir($directory)) {
-                    mkdir($directory, 0775, true);
-                }
-
-                $file->move($directory, $filename);
-
-                $path = 'designs/' . $filename;
-
-                $imageUrl = url('storage/' . $path);
-                $imagePublicId = $path;
-            }
+            $imageUrl = $uploaded['url'];
+            $imagePublicId = $uploaded['path'];
         }
 
         $design->update([
@@ -150,12 +171,7 @@ class DesignController extends Controller
 
     public function destroy(Design $design)
     {
-        if (
-            $design->image_public_id &&
-            Storage::disk('public')->exists($design->image_public_id)
-        ) {
-            Storage::disk('public')->delete($design->image_public_id);
-        }
+        $this->deleteFromSupabase($design->image_public_id);
 
         $design->delete();
 
