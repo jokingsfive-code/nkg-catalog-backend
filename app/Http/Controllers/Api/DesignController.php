@@ -114,13 +114,17 @@ class DesignController extends Controller
             $uploaded = $this->uploadToSupabase($file, $filename);
 
             $design = Design::create([
-                'category_id' => $validated['category_id'],
-                'name' => $nameOnly,
-                'image_url' => $uploaded['url'],
-                'image_public_id' => $uploaded['path'],
-                'sort_order' => 0,
-                'is_featured' => false,
-            ]);
+    'category_id' => $validated['category_id'],
+    'name' => $nameOnly,
+    'image_url' => $uploaded['url'],
+    'image_public_id' => $uploaded['path'],
+    'sort_order' => 0,
+    'is_featured' => false,
+]);
+
+$design->update([
+    'name' => 'NKG-' . str_pad($design->id, 4, '0', STR_PAD_LEFT),
+]);
 
             $uploadedDesigns[] = $design->load('category');
         }
