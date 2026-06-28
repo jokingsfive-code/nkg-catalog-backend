@@ -5,7 +5,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\DesignController;
 
-function checkAdminKey(Request $request) {
+function checkAdminKey(Request $request)
+{
     $adminKey = env('ADMIN_API_KEY');
 
     if (!$adminKey || $request->header('X-Admin-Key') !== $adminKey) {
@@ -22,6 +23,7 @@ Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/categories/{category}', [CategoryController::class, 'show']);
 
 Route::get('/designs', [DesignController::class, 'index']);
+Route::get('/design/code/{code}', [DesignController::class, 'findByCode']);
 Route::get('/designs/{design}', [DesignController::class, 'show']);
 
 /*

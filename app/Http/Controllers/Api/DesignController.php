@@ -28,6 +28,15 @@ class DesignController extends Controller
         return response()->json($designs);
     }
 
+    public function findByCode($code)
+    {
+        $design = Design::with('category')
+            ->where('name', strtoupper($code))
+            ->firstOrFail();
+
+        return response()->json($design);
+    }
+
     private function uploadToSupabase($file, string $filename): array
     {
         $supabaseUrl = rtrim(env('SUPABASE_URL'), '/');
@@ -114,19 +123,19 @@ class DesignController extends Controller
             $uploaded = $this->uploadToSupabase($file, $filename);
 
             $design = Design::create([
-    'category_id' => $validated['category_id'],
-    'name' => $nameOnly,
-    'image_url' => $uploaded['url'],
-    'image_public_id' => $uploaded['path'],
-    'sort_order' => 0,
-    'is_featured' => false,
-]);
+                'category_id' => $validated['category_id'],
+                'name' => $nameOnly,
+                'image_url' => $uploaded['url'],
+                'image_public_id' => $uploaded['path'],
+                'sort_order' => 0,
+                'is_featured' => false,
+            ]);
 
-$design->update([
-    'name' => 'NKG-' . str_pad($design->id, 4, '0', STR_PAD_LEFT),
-]);
+            $design->update([
+                'name' => 'NKG-' . str_pad($design->id, 4, '0', STR_PAD_LEFT),
+            ]);
 
-            $uploadedDesigns[] = $design->load('category');
+            $uploadedDesigns[] = $design->fresh()->load('category');
         }
 
         return response()->json([
