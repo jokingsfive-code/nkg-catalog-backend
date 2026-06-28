@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: nkg-catalog-backend
+    runtime: docker
+    plan: free
+    region: singapore
+
+    dockerfilePath: ./Dockerfile
+
+    envVars:
+      - key: APP_NAME
+        value: "NKG Catalog"
+
+      - key: APP_ENV
+        value: production
+
+      - key: APP_DEBUG
+        value: "false"
+
+      - key: APP_KEY
+        sync: false
+
+      - key: APP_URL
+        sync: false
+
+      - key: DB_CONNECTION
+        value: pgsql
+
+      - key: DB_HOST
+        sync: false
+
+      - key: DB_PORT
+        value: "6543"
+
+      - key: DB_DATABASE
+        value: postgres
+
+      - key: DB_USERNAME
+        sync: false
+
+      - key: DB_PASSWORD
+        sync: false
+
+      - key: DB_SSLMODE
+        value: require
+
+      - key: SESSION_DRIVER
+        value: database
+
+      - key: CACHE_STORE
+        value: database
+
+      - key: QUEUE_CONNECTION
+        value: database
+
+      - key: FILESYSTEM_DISK
+        value: public
