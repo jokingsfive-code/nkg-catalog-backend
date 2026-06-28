@@ -95,7 +95,7 @@ class DesignController extends Controller
         $validated = $request->validate([
             'category_id' => 'required|exists:categories,id',
             'name' => 'nullable|string|max:255',
-            'image' => 'nullable|mimes:png,jpg,jpeg,webp|max:102400',
+            'image' => 'nullable|mimes:png,jpg,jpeg,webp|max:512000',
             'sort_order' => 'nullable|integer',
             'is_featured' => 'nullable|boolean',
         ]);
