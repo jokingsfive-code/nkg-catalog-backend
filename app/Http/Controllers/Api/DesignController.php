@@ -39,18 +39,22 @@ class DesignController extends Controller
         }
 
         $path = 'designs/' . $filename;
+        $mimeType = $file->getMimeType() ?: 'application/octet-stream';
 
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $serviceKey,
             'apikey' => $serviceKey,
-            'Content-Type' => $file->getMimeType(),
             'x-upsert' => 'true',
         ])
-            ->withBody(file_get_contents($file->getRealPath()), $file->getMimeType())
-            ->post($supabaseUrl . '/storage/v1/object/' . $bucket . '/' . $path);
+            ->withBody(file_get_contents($file->getRealPath()), $mimeType)
+            ->put($supabaseUrl . '/storage/v1/object/' . $bucket . '/' . $path);
 
         if (!$response->successful()) {
-            abort(500, 'Failed to upload image to Supabase Storage.');
+            return response()->json([
+                'message' => 'Failed to upload image to Supabase Storage.',
+                'status' => $response->status(),
+                'supabase_error' => $response->json() ?: $response->body(),
+            ], 500)->throwResponse();
         }
 
         return [
@@ -61,13 +65,17 @@ class DesignController extends Controller
 
     private function deleteFromSupabase(?string $path): void
     {
-        if (!$path) return;
+        if (!$path) {
+            return;
+        }
 
         $supabaseUrl = rtrim(env('SUPABASE_URL'), '/');
         $serviceKey = env('SUPABASE_SERVICE_ROLE_KEY');
         $bucket = env('SUPABASE_STORAGE_BUCKET', 'designs');
 
-        if (!$supabaseUrl || !$serviceKey) return;
+        if (!$supabaseUrl || !$serviceKey) {
+            return;
+        }
 
         Http::withHeaders([
             'Authorization' => 'Bearer ' . $serviceKey,
@@ -92,6 +100,7 @@ class DesignController extends Controller
             if (!$file || !$file->isValid()) {
                 return response()->json([
                     'message' => 'Upload file failed',
+                    'error' => $file ? $file->getErrorMessage() : 'File not found',
                 ], 422);
             }
 
@@ -144,6 +153,14 @@ class DesignController extends Controller
             $this->deleteFromSupabase($design->image_public_id);
 
             $file = $request->file('image');
+
+            if (!$file || !$file->isValid()) {
+                return response()->json([
+                    'message' => 'Upload file failed',
+                    'error' => $file ? $file->getErrorMessage() : 'File not found',
+                ], 422);
+            }
+
             $originalName = $file->getClientOriginalName();
             $nameOnly = pathinfo($originalName, PATHINFO_FILENAME);
             $extension = strtolower($file->getClientOriginalExtension());
